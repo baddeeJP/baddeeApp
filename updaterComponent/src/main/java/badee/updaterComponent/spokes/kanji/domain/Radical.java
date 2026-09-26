@@ -6,8 +6,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 /**
- * A radical (kanji component). Populated primarily from RADKFILE. Schema is a
- * stub for now — fields grow as the sub-source is implemented.
+ * A radical (kanji component) from RADKFILE, keyed by its glyph. Some RADKFILE
+ * radicals have no Unicode form of their own and are represented by a
+ * stand-in kanji (e.g. 化 for the 亻 variant), exactly as RADKFILE lists them.
+ * Which kanji contain it is recorded on {@link Kanji#getRadicals()}.
  */
 @Entity
 @Table(name = "radical")
@@ -23,8 +25,9 @@ public class Radical {
 	protected Radical() {
 	}
 
-	public Radical(String character) {
+	public Radical(String character, Integer strokeCount) {
 		this.character = character;
+		this.strokeCount = strokeCount;
 	}
 
 	public String getCharacter() {

@@ -12,8 +12,10 @@ import org.springframework.stereotype.Component;
  * tracked independently via its own feed id. They are combined into one spoke
  * because they jointly build the same {@code Kanji}/{@code Radical} entities.
  *
- * <p>Stub: the module and its sub-sources are wired so the scheduler already
- * includes them; per-source fetch/parse/persist logic is still TODO.
+ * <p>Sub-sources run in {@code @Order}: KanjiDic2 → RADKFILE → KanjiVG. Each
+ * writes only its own fields via {@code KanjiUpserter}, so the order is a
+ * nicety rather than a requirement, and a failing sub-source doesn't stop the
+ * others. Postgres-only (no Elasticsearch index).
  */
 @Component
 public class KanjiModule implements DataSourceModule {

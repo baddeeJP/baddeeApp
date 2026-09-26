@@ -1,5 +1,6 @@
 package badee.updaterComponent.spokes.jmdict.parse;
 
+import badee.updaterComponent.hub.XmlStreams;
 import badee.updaterComponent.spokes.jmdict.domain.Reading;
 import badee.updaterComponent.spokes.jmdict.domain.Sense;
 import badee.updaterComponent.spokes.jmdict.domain.VocabEntry;
@@ -28,10 +29,8 @@ public class JmdictParser {
 			"news1", "ichi1", "spec1", "spec2", "gai1");
 
 	public void parse(Path xmlFile, Consumer<VocabEntry> entryConsumer) throws IOException {
-		XMLInputFactory factory = XMLInputFactory.newInstance();
 		// JMdict inlines its DTD and uses entity refs (e.g. &n;) for pos/misc.
-		factory.setProperty(XMLInputFactory.IS_REPLACING_ENTITY_REFERENCES, Boolean.TRUE);
-		factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, Boolean.FALSE);
+		XMLInputFactory factory = XmlStreams.newInputFactory();
 
 		try (InputStream in = Files.newInputStream(xmlFile)) {
 			XMLStreamReader reader = factory.createXMLStreamReader(in);
