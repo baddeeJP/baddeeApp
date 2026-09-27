@@ -31,7 +31,7 @@ public class Sense {
 
 	@ElementCollection
 	@CollectionTable(name = "sense_gloss", joinColumns = @JoinColumn(name = "sense_id"))
-	@Column(name = "gloss")
+	@Column(name = "gloss", columnDefinition = "text") // a few real JMdict glosses exceed 255 chars
 	private List<String> glosses = new ArrayList<>();
 
 	@ElementCollection

@@ -14,11 +14,14 @@ import org.junit.jupiter.api.io.TempDir;
 
 class TatoebaParserTest {
 
-	// A-line: japanese <tab> english #ID=<jpn>_<eng>; B-line: index headwords.
+	// A-line: japanese <tab> english #ID=<eng>_<jpn>; B-line: index headwords.
+	// As in the real corpus, two Japanese variants share one English sentence (id 300).
 	private static final String FIXTURE =
-			"A: 私は日本語を話します。\tI speak Japanese.#ID=100_200\n"
+			"A: 私は日本語を話します。\tI speak Japanese.#ID=300_100\n"
 			+ "B: 私 は 日本語 話す\n"
-			+ "A: これはペンです。\tThis is a pen.#ID=101_201\n"
+			+ "A: 日本語を話します。\tI speak Japanese.#ID=300_101\n"
+			+ "B: 日本語 話す\n"
+			+ "A: これはペンです。\tThis is a pen.#ID=301_102\n"
 			+ "B: 此れ は ペン\n";
 
 	@Test
@@ -29,15 +32,15 @@ class TatoebaParserTest {
 		List<ExampleSentence> sentences = new ArrayList<>();
 		new TatoebaParser().parse(file, sentences::add);
 
-		assertEquals(2, sentences.size());
+		assertEquals(List.of(100L, 101L, 102L), sentences.stream().map(ExampleSentence::getId).toList(),
+				"Japanese variants sharing an English translation keep distinct ids");
 
 		ExampleSentence first = sentences.get(0);
-		assertEquals(100L, first.getId());
 		assertEquals("私は日本語を話します。", first.getJapanese());
 		assertEquals("I speak Japanese.", first.getEnglish());
 		assertEquals("私 は 日本語 話す", first.getIndexWords());
 
-		assertEquals(101L, sentences.get(1).getId());
-		assertEquals("This is a pen.", sentences.get(1).getEnglish());
+		assertEquals("日本語を話します。", sentences.get(1).getJapanese());
+		assertEquals("This is a pen.", sentences.get(2).getEnglish());
 	}
 }

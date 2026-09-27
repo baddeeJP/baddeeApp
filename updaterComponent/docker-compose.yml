@@ -17,7 +17,9 @@ services:
       retries: 10
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    # Keep the major version in step with the elasticsearch-java client that Spring Boot
+    # manages (9.x for Boot 4.1); a 9.x client is rejected by an 8.x server.
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.4.5
     container_name: updater-elasticsearch
     environment:
       - discovery.type=single-node

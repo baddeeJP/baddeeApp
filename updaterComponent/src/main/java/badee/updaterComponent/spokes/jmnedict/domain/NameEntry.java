@@ -25,12 +25,12 @@ public class NameEntry {
 
 	/** Kanji writings ({@code <keb>}). Empty for kana-only names. */
 	@JdbcTypeCode(SqlTypes.ARRAY)
-	@Column(name = "kanji")
+	@Column(name = "kanji", columnDefinition = "text[]")
 	private List<String> kanji = new ArrayList<>();
 
 	/** Kana readings ({@code <reb>}). */
 	@JdbcTypeCode(SqlTypes.ARRAY)
-	@Column(name = "readings")
+	@Column(name = "readings", columnDefinition = "text[]")
 	private List<String> readings = new ArrayList<>();
 
 	/**
@@ -38,12 +38,12 @@ public class NameEntry {
 	 * descriptions, e.g. "family or surname", "place name", "company name".
 	 */
 	@JdbcTypeCode(SqlTypes.ARRAY)
-	@Column(name = "name_types")
+	@Column(name = "name_types", columnDefinition = "text[]")
 	private List<String> nameTypes = new ArrayList<>();
 
 	/** Romanizations / translations ({@code <trans_det>}), e.g. "Koizumi". */
 	@JdbcTypeCode(SqlTypes.ARRAY)
-	@Column(name = "translations")
+	@Column(name = "translations", columnDefinition = "text[]")
 	private List<String> translations = new ArrayList<>();
 
 	protected NameEntry() {

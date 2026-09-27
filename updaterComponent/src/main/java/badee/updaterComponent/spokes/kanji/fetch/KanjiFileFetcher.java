@@ -22,6 +22,9 @@ public class KanjiFileFetcher {
 	private final HttpClient httpClient = HttpClient.newBuilder()
 			.followRedirects(HttpClient.Redirect.NORMAL)
 			.build();
+	private final HttpClient noRedirectClient = HttpClient.newBuilder()
+			.followRedirects(HttpClient.Redirect.NEVER)
+			.build();
 
 	/**
 	 * Downloads {@code url} and decompresses it into a fresh staging directory,
@@ -45,15 +48,18 @@ public class KanjiFileFetcher {
 		return file;
 	}
 
-	/** Performs a plain GET and returns the body as a string (small metadata lookups). */
-	public String fetchText(String url) throws IOException, InterruptedException {
-		HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-				.header("Accept", "application/json")
-				.GET().build();
-		HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-		if (response.statusCode() != 200) {
-			throw new IOException("Failed to fetch " + url + ", HTTP " + response.statusCode());
+	/**
+	 * Requests {@code url} without following redirects and returns the absolute
+	 * {@code Location} it redirects to (e.g. GitHub's {@code releases/latest}).
+	 */
+	public String redirectLocation(String url) throws IOException, InterruptedException {
+		HttpRequest request = HttpRequest.newBuilder(URI.create(url)).GET().build();
+		HttpResponse<Void> response = noRedirectClient.send(request, HttpResponse.BodyHandlers.discarding());
+		if (response.statusCode() / 100 != 3) {
+			throw new IOException("Expected a redirect from " + url + ", got HTTP " + response.statusCode());
 		}
-		return response.body();
+		String location = response.headers().firstValue("Location")
+				.orElseThrow(() -> new IOException("Redirect from " + url + " has no Location header"));
+		return URI.create(url).resolve(location).toString();
 	}
 }

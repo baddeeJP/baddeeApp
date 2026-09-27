@@ -1,43 +1,46 @@
 # updaterComponent — Next Steps
 
-Pointer for picking up work on the scheduled updating backend. It is a **hub-and-spoke**
-updater: one spoke per Japanese data source, downloading → parsing → writing to Postgres
-(source of truth) and, for search-relevant data, indexing into Elasticsearch (**write-only**;
-a separate app does all querying). See `written_reports/Architectures/Container_Diagram_V03.JPG`.
+All four spokes (JMdict, JMnedict, Kanji, Tatoeba) are implemented, covered by unit and
+Testcontainers integration tests, and verified end-to-end on real upstream data (2026-09-27).
+Full history of that work, build/run commands and hard-won gotchas:
+`../written_reports/Archived/Claude/NEXT_STEPS.md`.
 
-> **Full handoff plan** (this machine): `~/.claude/plans/check-out-written-reports-architectures-imperative-ocean.md`
-> — read its "Current status", "Remaining work", and "Patterns to reuse" sections first.
+## 1. Go live on AWS Cognito
 
-## Status
+The code is ready (`hub/CognitoJwtDecoderConfig`, `hub/SecurityConfig`); it needs a real user pool.
 
-- **Done:** hub (scheduler, `SourceVersion` idempotency, hashing, secured `/admin` trigger API),
-  **JMdict** spoke (full), **Tatoeba** spoke (full), `docker-compose.yml` (Postgres + Elasticsearch),
-  parser unit tests. `./mvnw test` → BUILD SUCCESS.
-- **Stubbed:** **Kanji** spoke (combined: KanjiDic2 / KanjiVG / RADKFILE sub-sources) and **JMnedict** spoke.
+- [ ] Create (or pick) the user pool, an app client for admin callers, and a Cognito group
+      `updater-admin` (or change `updater.admin.required-group`). Add admin users to the group.
+- [ ] Configure the deployed environment:
+  ```properties
+  updater.admin.stub-auth=false
+  spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito-idp.<region>.amazonaws.com/<userPoolId>
+  updater.admin.cognito.client-ids=<appClientId>
+  ```
+- [ ] Smoke-test with a real **access** token (ID tokens are rejected by design): expect 200 on
+      `GET /admin/updates` for a group member, 403 for a non-member, 401 without a token.
+- [ ] Once no environment uses the dev token, delete `hub/StubJwtDecoderConfig` and the
+      `updater.admin.dev-token` / `stub-auth` properties.
 
-## Remaining work
+## 2. Schema migrations
 
-1. Implement the **Kanji** sub-sources (`spokes/kanji/{kanjidic2,kanjivg,radkfile}`) — Postgres-only.
-2. Implement the **JMnedict** spoke (`spokes/jmnedict`) — Postgres-only.
-3. Swap stub JWT auth for **AWS Cognito**: set `updater.admin.stub-auth=false` +
-   `spring.security.oauth2.resourceserver.jwt.issuer-uri`, delete `StubJwtDecoderConfig`.
-4. Add **integration tests** (Testcontainers) covering persist + index round-trips.
+The schema is currently created by `spring.jpa.hibernate.ddl-auto=update`, which adds tables and
+columns but never changes existing column types or drops anything, so type fixes silently don't
+reach existing databases.
 
-## How to build / run
+- [ ] Add Flyway (`spring-boot-starter-flyway`), generate a `V1__baseline.sql` from the current
+      entity schema (Postgres 16), and switch to `ddl-auto=validate`.
+- [ ] Keep the column choices the real-data run proved necessary: `text` / `text[]` for free-text
+      and list columns (guarded by `UpdaterComponentApplicationIT.freeTextColumnsAreNotLengthLimited`).
+- [ ] Any database created before 2026-09-27 must be reset (`docker compose down -v`): its
+      column types and Tatoeba ids (now keyed on the Japanese sentence id) are wrong.
 
-```bash
-docker compose up -d          # Postgres :5432 (updater/updater), Elasticsearch :9200
-./mvnw test                   # unit tests (no infra needed)
-./mvnw spring-boot:run        # boots; scheduler cron 0 0 3 * * *
+## 3. Entries removed upstream
 
-# Manual trigger (Bearer token; stub dev token = "dev-token"):
-curl -H "Authorization: Bearer dev-token" localhost:8080/admin/updates
-curl -H "Authorization: Bearer dev-token" -X POST localhost:8080/admin/updates/jmdict
-```
+Spokes only upsert. An entry deleted from JMdict/JMnedict/Tatoeba/KanjiDic2 upstream stays in
+Postgres and Elasticsearch forever, and a kanji dropped from RADKFILE keeps its old radicals.
 
-## To finish a new spoke, copy the JMdict/Tatoeba pattern
-
-Sub-packages per spoke: `fetch/` (download + gunzip), `parse/` (streaming parser emitting entities
-via a `Consumer`), `domain/` (JPA entity + repository), `search/` (ES doc + write-only writer, JMdict/Tatoeba only),
-and a `*Module` at the spoke root implementing `DataSourceModule` (`@Component`, auto-discovered by the scheduler).
-Guard work with `Hashing.sha256(file)` + `SourceVersionService.hasChanged(feedId, hash)` / `markUpdated(...)`.
+- [ ] Decide whether stale entries matter to the consuming search app.
+- [ ] If so, one approach: during a changed-file run, collect the ids seen, then delete rows (and
+      ES documents) not seen, in the same run, after a successful parse only (never on failure).
+      Cover it with a `*ModuleIT` case that publishes a file with one entry removed.

@@ -3,7 +3,6 @@ package badee.updaterComponent.spokes.tatoeba.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 /**
@@ -11,6 +10,10 @@ import jakarta.persistence.Table;
  * keyed by the corpus sentence id. The vocab it illustrates is referenced
  * loosely by the surface headword string (indexWords), not a hard FK, to keep
  * spokes decoupled.
+ *
+ * <p>Long strings are plain Postgres {@code text}, not {@code @Lob}: Hibernate
+ * maps a {@code @Lob String} to an {@code oid} large object on Postgres, which
+ * other apps can't read as text and which leaks a large object on every reparse.
  */
 @Entity
 @Table(name = "example_sentence")
@@ -20,17 +23,14 @@ public class ExampleSentence {
 	@Column(name = "id")
 	private Long id;
 
-	@Lob
-	@Column(name = "japanese", nullable = false)
+	@Column(name = "japanese", nullable = false, columnDefinition = "text")
 	private String japanese;
 
-	@Lob
-	@Column(name = "english")
+	@Column(name = "english", columnDefinition = "text")
 	private String english;
 
 	/** Space-separated headwords the sentence indexes against (from the B-line). */
-	@Lob
-	@Column(name = "index_words")
+	@Column(name = "index_words", columnDefinition = "text")
 	private String indexWords;
 
 	@Column(name = "source")

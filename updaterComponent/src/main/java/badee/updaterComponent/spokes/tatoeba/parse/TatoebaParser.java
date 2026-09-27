@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
  * </pre>
  *
  * The A-line carries the Japanese text, the tab-separated English, and an
- * {@code #ID=<jpn>_<eng>} trailer (we key on the Japanese id). The following
+ * {@code #ID=<eng>_<jpn>} trailer (we key on the Japanese id). The following
  * B-line carries the space-separated index headwords. Emits one
  * {@link ExampleSentence} per pair so the caller can batch and persist.
  */
@@ -67,9 +67,17 @@ public class TatoebaParser {
 		return new ExampleSentence(id, japanese, english, indexWords, SOURCE);
 	}
 
-	/** The id trailer is "<jpnId>_<engId>"; we key on the Japanese id. */
+	/**
+	 * The id trailer is "<engId>_<jpnId>"; we key on the Japanese id. (In the
+	 * real corpus the first id is shared by Japanese variants that have the same
+	 * English translation, while the second is unique per Japanese sentence.)
+	 */
 	private Long parseJapaneseId(String idPart) {
-		String jpnId = idPart.split("_", 2)[0].trim();
+		String[] ids = idPart.split("_", 2);
+		if (ids.length < 2) {
+			return null;
+		}
+		String jpnId = ids[1].trim();
 		try {
 			return Long.parseLong(jpnId);
 		} catch (NumberFormatException e) {

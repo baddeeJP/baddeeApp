@@ -40,21 +40,21 @@ public class Kanji {
 	private String codepoint;
 
 	@JdbcTypeCode(SqlTypes.ARRAY)
-	@Column(name = "onyomi")
+	@Column(name = "onyomi", columnDefinition = "text[]")
 	private List<String> onyomi = new ArrayList<>();
 
 	@JdbcTypeCode(SqlTypes.ARRAY)
-	@Column(name = "kunyomi")
+	@Column(name = "kunyomi", columnDefinition = "text[]")
 	private List<String> kunyomi = new ArrayList<>();
 
 	/** Readings used only in names. */
 	@JdbcTypeCode(SqlTypes.ARRAY)
-	@Column(name = "nanori")
+	@Column(name = "nanori", columnDefinition = "text[]")
 	private List<String> nanori = new ArrayList<>();
 
 	/** English meanings. */
 	@JdbcTypeCode(SqlTypes.ARRAY)
-	@Column(name = "meanings")
+	@Column(name = "meanings", columnDefinition = "text[]")
 	private List<String> meanings = new ArrayList<>();
 
 	@Column(name = "stroke_count")
@@ -91,7 +91,7 @@ public class Kanji {
 
 	/** SVG path data ({@code d} attribute) for each stroke, in stroke order. */
 	@JdbcTypeCode(SqlTypes.ARRAY)
-	@Column(name = "stroke_paths")
+	@Column(name = "stroke_paths", columnDefinition = "text[]")
 	private List<String> strokePaths = new ArrayList<>();
 
 	protected Kanji() {

@@ -1,6 +1,5 @@
 package badee.updaterComponent.spokes.tatoeba.search;
 
-import org.springframework.data.elasticsearch.repository.ElasticsearchRepository;
 import org.springframework.stereotype.Component;
 
 /**
@@ -10,10 +9,6 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class ExampleSentenceIndexWriter {
-
-	interface ExampleSentenceEsRepository
-			extends ElasticsearchRepository<ExampleSentenceDocument, String> {
-	}
 
 	private final ExampleSentenceEsRepository repository;
 

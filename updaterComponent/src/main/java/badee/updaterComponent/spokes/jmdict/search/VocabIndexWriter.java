@@ -1,6 +1,5 @@
 package badee.updaterComponent.spokes.jmdict.search;
 
-import org.springframework.data.elasticsearch.repository.ElasticsearchRepository;
 import org.springframework.stereotype.Component;
 
 /**
@@ -10,9 +9,6 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class VocabIndexWriter {
-
-	interface VocabEsRepository extends ElasticsearchRepository<VocabDocument, String> {
-	}
 
 	private final VocabEsRepository repository;
 
