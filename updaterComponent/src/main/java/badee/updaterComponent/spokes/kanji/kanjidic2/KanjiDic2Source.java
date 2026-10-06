@@ -4,12 +4,15 @@ import badee.updaterComponent.hub.Hashing;
 import badee.updaterComponent.hub.SourceVersionService;
 import badee.updaterComponent.spokes.kanji.KanjiSubSource;
 import badee.updaterComponent.spokes.kanji.domain.Kanji;
+import badee.updaterComponent.spokes.kanji.domain.KanjiRepository;
 import badee.updaterComponent.spokes.kanji.domain.KanjiUpserter;
 import badee.updaterComponent.spokes.kanji.fetch.KanjiFileFetcher;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,15 +34,18 @@ public class KanjiDic2Source implements KanjiSubSource {
 
 	private final KanjiFileFetcher fetcher;
 	private final KanjiDic2Parser parser;
+	private final KanjiRepository kanjiRepository;
 	private final KanjiUpserter upserter;
 	private final SourceVersionService sourceVersionService;
 	private final String downloadUrl;
 
-	public KanjiDic2Source(KanjiFileFetcher fetcher, KanjiDic2Parser parser, KanjiUpserter upserter,
+	public KanjiDic2Source(KanjiFileFetcher fetcher, KanjiDic2Parser parser,
+			KanjiRepository kanjiRepository, KanjiUpserter upserter,
 			SourceVersionService sourceVersionService,
 			@Value("${updater.kanjidic2.url:http://ftp.edrdg.org/pub/Nihongo/kanjidic2.xml.gz}") String downloadUrl) {
 		this.fetcher = fetcher;
 		this.parser = parser;
+		this.kanjiRepository = kanjiRepository;
 		this.upserter = upserter;
 		this.sourceVersionService = sourceVersionService;
 		this.downloadUrl = downloadUrl;
@@ -62,16 +68,21 @@ public class KanjiDic2Source implements KanjiSubSource {
 
 			List<KanjiDic2Character> batch = new ArrayList<>(BATCH_SIZE);
 			int[] total = {0};
+			Set<String> seen = new HashSet<>();
 			parser.parse(xmlFile, character -> {
+				seen.add(character.literal());
 				batch.add(character);
 				if (batch.size() >= BATCH_SIZE) {
 					total[0] += flush(batch);
 				}
 			});
 			total[0] += flush(batch);
+			// Only reached when the whole file parsed and persisted: a failure throws above.
+			int cleared = upserter.clearDropped(FEED_ID, kanjiRepository.findKanjiDic2Characters(), seen,
+					Kanji::clearKanjiDic2Data);
 
 			sourceVersionService.markUpdated(FEED_ID, hash);
-			log.info("KanjiDic2 update complete: {} kanji persisted", total[0]);
+			log.info("KanjiDic2 update complete: {} kanji persisted, {} cleared", total[0], cleared);
 		} catch (IOException | InterruptedException e) {
 			if (e instanceof InterruptedException) {
 				Thread.currentThread().interrupt();

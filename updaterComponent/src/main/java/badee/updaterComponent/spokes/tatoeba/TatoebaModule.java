@@ -2,6 +2,7 @@ package badee.updaterComponent.spokes.tatoeba;
 
 import badee.updaterComponent.hub.DataSourceModule;
 import badee.updaterComponent.hub.Hashing;
+import badee.updaterComponent.hub.RetirementGuard;
 import badee.updaterComponent.hub.SourceVersionService;
 import badee.updaterComponent.spokes.tatoeba.domain.ExampleSentence;
 import badee.updaterComponent.spokes.tatoeba.domain.ExampleSentenceRepository;
@@ -11,8 +12,11 @@ import badee.updaterComponent.spokes.tatoeba.search.ExampleSentenceDocument;
 import badee.updaterComponent.spokes.tatoeba.search.ExampleSentenceIndexWriter;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -39,15 +43,18 @@ public class TatoebaModule implements DataSourceModule {
 	private final ExampleSentenceRepository repository;
 	private final ExampleSentenceIndexWriter indexWriter;
 	private final SourceVersionService sourceVersionService;
+	private final RetirementGuard retirementGuard;
 
 	public TatoebaModule(TatoebaFetcher fetcher, TatoebaParser parser,
 			ExampleSentenceRepository repository, ExampleSentenceIndexWriter indexWriter,
-			SourceVersionService sourceVersionService) {
+			SourceVersionService sourceVersionService,
+			RetirementGuard retirementGuard) {
 		this.fetcher = fetcher;
 		this.parser = parser;
 		this.repository = repository;
 		this.indexWriter = indexWriter;
 		this.sourceVersionService = sourceVersionService;
+		this.retirementGuard = retirementGuard;
 	}
 
 	@Override
@@ -67,22 +74,39 @@ public class TatoebaModule implements DataSourceModule {
 
 			List<ExampleSentence> batch = new ArrayList<>(BATCH_SIZE);
 			int[] total = {0};
+			Set<Long> seen = new HashSet<>();
 			parser.parse(textFile, sentence -> {
+				seen.add(sentence.getId());
 				batch.add(sentence);
 				if (batch.size() >= BATCH_SIZE) {
 					total[0] += flush(batch);
 				}
 			});
 			total[0] += flush(batch);
+			// Only reached when the whole file parsed and persisted: a failure throws above.
+			int retired = retireMissing(seen);
 
 			sourceVersionService.markUpdated(FEED_ID, hash);
-			log.info("Tatoeba update complete: {} sentences persisted and indexed", total[0]);
+			log.info("Tatoeba update complete: {} sentences persisted and indexed, {} retired", total[0], retired);
 		} catch (IOException | InterruptedException e) {
 			if (e instanceof InterruptedException) {
 				Thread.currentThread().interrupt();
 			}
 			throw new IllegalStateException("Tatoeba update failed", e);
 		}
+	}
+
+	/**
+	 * Retires active sentences the new file no longer has: deleted from search first, then
+	 * marked in Postgres, so a failure between the two is redone by the next run.
+	 * Returns how many were retired (0 if the retire guard blocked it).
+	 */
+	private int retireMissing(Set<Long> seen) {
+		Instant now = Instant.now();
+		return retirementGuard.retireMissing(FEED_ID, repository.findActiveKeys(TatoebaParser.SOURCE), seen, batch -> {
+			indexWriter.deleteAll(batch.stream().map(String::valueOf).toList());
+			repository.retire(batch, now);
+		});
 	}
 
 	/** Persists the batch to Postgres, mirrors it to Elasticsearch, and clears it. */

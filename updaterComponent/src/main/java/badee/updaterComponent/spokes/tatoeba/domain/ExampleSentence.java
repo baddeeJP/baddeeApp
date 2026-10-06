@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 
 /**
  * A Japanese/English example sentence pair from the Tanaka Corpus (Tatoeba),
@@ -35,6 +36,10 @@ public class ExampleSentence {
 
 	@Column(name = "source")
 	private String source;
+
+	/** Set when the entry disappeared from upstream; null while active. Cleared if it comes back. */
+	@Column(name = "retired_at")
+	private Instant retiredAt;
 
 	protected ExampleSentence() {
 	}

@@ -25,7 +25,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class TatoebaParser {
 
-	private static final String SOURCE = "tanaka-corpus";
+	public static final String SOURCE = "tanaka-corpus";
 
 	public void parse(Path textFile, Consumer<ExampleSentence> consumer) throws IOException {
 		try (BufferedReader reader = Files.newBufferedReader(textFile, StandardCharsets.UTF_8)) {

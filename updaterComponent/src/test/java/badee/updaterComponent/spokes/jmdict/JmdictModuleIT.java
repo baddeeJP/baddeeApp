@@ -2,6 +2,9 @@ package badee.updaterComponent.spokes.jmdict;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import badee.updaterComponent.hub.SourceVersion;
@@ -114,6 +117,8 @@ class JmdictModuleIT extends IntegrationTest {
 		run("jmdict");
 
 		assertFalse(firstHash.equals(sourceVersion("jmdict").getContentHash()));
+		assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM vocab_entry", Integer.class),
+				"updated in place under the same ent_seq, no new row");
 		assertEquals(List.of("that over there"), glosses(1000002));
 		assertEquals(1, jdbc.queryForObject(
 				"SELECT count(*) FROM sense WHERE ent_seq = 1000002", Integer.class));
@@ -124,6 +129,65 @@ class JmdictModuleIT extends IntegrationTest {
 				WHERE s.ent_seq = 1000002""", Integer.class));
 		assertEquals(List.of("that over there"),
 				elasticsearchOperations.get("1000002", VocabDocument.class).getGlosses());
+	}
+
+	@Test
+	void entryRemovedUpstreamIsRetiredInPostgresAndDeletedFromSearch() {
+		publish(NIHONGO + ANO_V1);
+		run("jmdict");
+
+		publish(NIHONGO);
+		run("jmdict");
+
+		assertTrue(isRetired(1000002), "row kept, marked retired");
+		assertFalse(isRetired(1000001));
+		assertEquals(List.of("that", "those"), glosses(1000002), "children kept");
+		assertNull(elasticsearchOperations.get("1000002", VocabDocument.class));
+		assertNotNull(elasticsearchOperations.get("1000001", VocabDocument.class));
+	}
+
+	@Test
+	void entryReAddedUpstreamIsUnretiredAndReindexed() {
+		publish(NIHONGO + ANO_V1);
+		run("jmdict");
+		publish(NIHONGO);
+		run("jmdict");
+
+		publish(NIHONGO + ANO_V2);
+		run("jmdict");
+
+		assertFalse(isRetired(1000002));
+		assertEquals(List.of("that over there"),
+				elasticsearchOperations.get("1000002", VocabDocument.class).getGlosses());
+	}
+
+	@Test
+	void failedRunRetiresNothing() {
+		publish(NIHONGO + ANO_V1);
+		run("jmdict");
+
+		fixtures.publishGzipped("/JMdict_e.gz", HEADER + NIHONGO); // truncated: no closing </JMdict>
+		assertThrows(RuntimeException.class, () -> run("jmdict"));
+
+		assertFalse(isRetired(1000002));
+		assertNotNull(elasticsearchOperations.get("1000002", VocabDocument.class));
+	}
+
+	@Test
+	void retireGuardBlocksRetiringTooManyEntriesButStillAppliesUpserts() {
+		publish(NIHONGO + ANO_V1 + entry(1000004, "これ", "this"));
+		run("jmdict");
+
+		// Only 1 of 3 active entries would remain: below the test guard of 0.5.
+		publish(entry(1000004, "これ", "this one"));
+		run("jmdict");
+
+		assertEquals(0, jdbc.queryForObject(
+				"SELECT count(*) FROM vocab_entry WHERE retired_at IS NOT NULL", Integer.class));
+		assertEquals(List.of("this one"), glosses(1000004));
+		refresh(VocabDocument.class);
+		assertEquals(3, elasticsearchOperations.count(
+				elasticsearchOperations.matchAllQuery(), VocabDocument.class));
 	}
 
 	/** The real JMdict has glosses up to ~350 chars; one overlong value used to abort the run. */
@@ -145,6 +209,21 @@ class JmdictModuleIT extends IntegrationTest {
 
 	private void publish(String entries) {
 		fixtures.publishGzipped("/JMdict_e.gz", HEADER + entries + "</JMdict>");
+	}
+
+	private static String entry(long entSeq, String reading, String gloss) {
+		return """
+				<entry>
+				<ent_seq>%d</ent_seq>
+				<r_ele><reb>%s</reb></r_ele>
+				<sense><gloss>%s</gloss></sense>
+				</entry>
+				""".formatted(entSeq, reading, gloss);
+	}
+
+	private boolean isRetired(long entSeq) {
+		return jdbc.queryForObject(
+				"SELECT retired_at IS NOT NULL FROM vocab_entry WHERE ent_seq = ?", Boolean.class, entSeq);
 	}
 
 	private List<String> glosses(long entSeq) {

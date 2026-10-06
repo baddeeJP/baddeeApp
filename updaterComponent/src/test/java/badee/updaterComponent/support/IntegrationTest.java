@@ -28,9 +28,18 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * every subclass (and the single cached Spring context), so the suite pays the
  * container start-up cost only once. Each test starts from empty tables and
  * empty indices. The cron schedule is disabled so only the test drives runs.
+ * Retire guards are lowered from the production 0.98 to 0.5 so a two-entry
+ * fixture can drop one entry, while dropping two of three still trips the guard.
  * MockMvc is configured here (not per subclass) so all tests share one context.
  */
-@SpringBootTest(properties = "updater.schedule.cron=-")
+@SpringBootTest(properties = {
+		"updater.schedule.cron=-",
+		"updater.jmdict.retire-guard=0.5",
+		"updater.jmnedict.retire-guard=0.5",
+		"updater.tatoeba.retire-guard=0.5",
+		"updater.kanji.kanjidic2.retire-guard=0.5",
+		"updater.kanji.radkfile.retire-guard=0.5",
+		"updater.kanji.kanjivg.retire-guard=0.5"})
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {
 

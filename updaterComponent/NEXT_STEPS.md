@@ -34,12 +34,31 @@ Hibernate-generated schema as of 2026-10-06 (verified identical via `pg_dump` di
   A DB whose schema differs from V1 (anything created before 2026-09-27) must be reset:
   `docker compose down -v`.
 
-## 3. Entries removed upstream
+## 3. Entries removed upstream: done (2026-10-06)
 
-Spokes only upsert. An entry deleted from JMdict/JMnedict/Tatoeba/KanjiDic2 upstream stays in
-Postgres and Elasticsearch forever, and a kanji dropped from RADKFILE keeps its old radicals.
+An entry missing from a changed upstream file is deleted from Elasticsearch and **retired** in
+Postgres (`retired_at` set, row kept). It is un-retired and re-indexed if it comes back. Kanji
+sub-sources clear only their own data, and a kanji is retired once no sub-source has it. The
+guard `updater.<feedId>.retire-guard` defaults to 0.98. Policy and reasons:
+`docs/adr/0001-retire-in-postgres-delete-from-search.md`.
 
-- [ ] Decide whether stale entries matter to the consuming search app.
-- [ ] If so, one approach: during a changed-file run, collect the ids seen, then delete rows (and
-      ES documents) not seen, in the same run, after a successful parse only (never on failure).
-      Cover it with a `*ModuleIT` case that publishes a file with one entry removed.
+- [ ] The future API backend must filter `retired_at IS NULL` (a view or a default repository
+      filter there).
+- [ ] Tune each feed's `retire-guard` from the logged `Retirement [<feed>]` counts once a few
+      real releases have run. First real run (2026-10-06, against the 2026-09-27 load):
+
+      | Feed | Active before | Retired | Notes |
+      |---|---|---|---|
+      | jmdict | 218,868 | 1 (`1905600` 深い霧) | ~37 new entries added; ES `vocab` = 218,867 = active rows |
+      | jmnedict | 743,675 | 1 (`5540981` 天文科学館) | |
+      | kanji.kanjidic2 | 13,108 | 0 | |
+      | kanji.radkfile, kanji.kanjivg, tatoeba | | | unchanged upstream (hash-skip) |
+
+      About 0.0005% per feed for 9 days of churn, far below the 2% the default guard allows.
+- [ ] Not done: radicals that RADKFILE drops stay in `radical` (only kanji links are cleared).
+      Purging long-retired, unreferenced rows is a possible later cleanup job.
+
+## 4. Jreibun: not ingested
+
+Out of scope: it isn't openly licensed or publicly downloadable. See
+`docs/adr/0002-open-data-sources-only-no-jreibun.md`.

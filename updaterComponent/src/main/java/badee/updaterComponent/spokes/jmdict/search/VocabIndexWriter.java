@@ -4,7 +4,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Write-only facade over the {@code vocab} Elasticsearch index. Exposes only
- * saving, matching this app's role: it indexes data for a separate search
+ * saving and deleting, matching this app's role: it indexes data for a separate search
  * application and never queries Elasticsearch itself.
  */
 @Component
@@ -22,5 +22,10 @@ public class VocabIndexWriter {
 
 	public void saveAll(Iterable<VocabDocument> documents) {
 		repository.saveAll(documents);
+	}
+
+	/** Removes documents of retired entries; ids not in the index are ignored. */
+	public void deleteAll(Iterable<String> ids) {
+		repository.deleteAllById(ids);
 	}
 }
