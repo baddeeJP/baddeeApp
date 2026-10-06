@@ -22,18 +22,17 @@ The code is ready (`hub/CognitoJwtDecoderConfig`, `hub/SecurityConfig`); it need
 - [ ] Once no environment uses the dev token, delete `hub/StubJwtDecoderConfig` and the
       `updater.admin.dev-token` / `stub-auth` properties.
 
-## 2. Schema migrations
+## 2. Schema migrations: done (2026-10-06)
 
-The schema is currently created by `spring.jpa.hibernate.ddl-auto=update`, which adds tables and
-columns but never changes existing column types or drops anything, so type fixes silently don't
-reach existing databases.
+Flyway owns the schema (`src/main/resources/db/migration`); Hibernate runs with
+`ddl-auto=validate`, so an entity/schema mismatch fails startup. `V1__baseline.sql` is the
+Hibernate-generated schema as of 2026-10-06 (verified identical via `pg_dump` diff).
 
-- [ ] Add Flyway (`spring-boot-starter-flyway`), generate a `V1__baseline.sql` from the current
-      entity schema (Postgres 16), and switch to `ddl-auto=validate`.
-- [ ] Keep the column choices the real-data run proved necessary: `text` / `text[]` for free-text
-      and list columns (guarded by `UpdaterComponentApplicationIT.freeTextColumnsAreNotLengthLimited`).
-- [ ] Any database created before 2026-09-27 must be reset (`docker compose down -v`): its
-      column types and Tatoeba ids (now keyed on the Japanese sentence id) are wrong.
+- Schema changes: add a new `V<n>__<description>.sql`; never edit an applied one.
+- Pre-Flyway databases with that exact schema are adopted as V1 by
+  `spring.flyway.baseline-on-migrate=true` (the compose DB was, keeping its 2026-09-27 data).
+  A DB whose schema differs from V1 (anything created before 2026-09-27) must be reset:
+  `docker compose down -v`.
 
 ## 3. Entries removed upstream
 
