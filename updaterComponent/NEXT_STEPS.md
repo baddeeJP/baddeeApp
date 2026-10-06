@@ -58,7 +58,15 @@ guard `updater.<feedId>.retire-guard` defaults to 0.98. Policy and reasons:
 - [ ] Not done: radicals that RADKFILE drops stay in `radical` (only kanji links are cleared).
       Purging long-retired, unreferenced rows is a possible later cleanup job.
 
-## 4. Jreibun: not ingested
+## 4. Run time of changed-file runs
+
+V3 indexes the foreign-key columns. Without the indexes, updating existing JMdict entries
+full-scanned the child tables for every entry (~25 entries/s, ~2.5 h). With them, a changed
+JMdict file takes ~10 min and JMnedict ~4 min (2026-10-06). The rest of the time is
+statement round trips: Hibernate deletes and inserts child rows one at a time, and `IDENTITY`
+ids block insert batching. If run time matters, switch to `SEQUENCE` ids / bulk upserts.
+
+## 5. Jreibun: not ingested
 
 Out of scope: it isn't openly licensed or publicly downloadable. See
 `docs/adr/0002-open-data-sources-only-no-jreibun.md`.

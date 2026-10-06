@@ -37,6 +37,26 @@ class UpdaterComponentApplicationIT extends IntegrationTest {
 	}
 
 	/**
+	 * Postgres doesn't index foreign-key columns by itself. Without an index, every
+	 * changed-file run turns each child lookup and orphan delete (a JMdict entry's
+	 * readings and senses) into a full scan of a 500k-row table: the first real
+	 * JMdict update ran at ~25 entries/s.
+	 */
+	@Test
+	void everyForeignKeyColumnIsIndexed() {
+		List<String> unindexed = jdbc.queryForList("""
+				SELECT c.conrelid::regclass || '.' || a.attname
+				FROM pg_constraint c
+				JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+				WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace
+				  AND NOT EXISTS (SELECT 1 FROM pg_index i
+				                  WHERE i.indrelid = c.conrelid AND i.indkey[0] = c.conkey[1])
+				ORDER BY 1""", String.class);
+
+		assertEquals(List.of(), unindexed);
+	}
+
+	/**
 	 * Hibernate defaults strings to varchar(255), and a single longer upstream
 	 * value (a JMdict gloss, a KanjiVG stroke path) aborts a whole feed update.
 	 * Only short, fixed-shape identifier columns may stay length-limited.
