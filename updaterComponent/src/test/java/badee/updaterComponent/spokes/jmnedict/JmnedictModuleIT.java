@@ -1,6 +1,8 @@
 package badee.updaterComponent.spokes.jmnedict;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import badee.updaterComponent.support.IntegrationTest;
 import java.util.List;
@@ -32,6 +34,15 @@ class JmnedictModuleIT extends IntegrationTest {
 			</entry>
 			""";
 
+	private static final String TANAKA = """
+			<entry>
+			<ent_seq>5000002</ent_seq>
+			<k_ele><keb>田中</keb></k_ele>
+			<r_ele><reb>たなか</reb></r_ele>
+			<trans><name_type>&surname;</name_type><trans_det>Tanaka</trans_det></trans>
+			</entry>
+			""";
+
 	@Test
 	void persistsNamesAsArrayColumnsAndIsIdempotentOnRerun() {
 		fixtures.publishGzipped("/JMnedict.xml.gz", HEADER + KOIZUMI + "</JMnedict>");
@@ -51,5 +62,45 @@ class JmnedictModuleIT extends IntegrationTest {
 		assertEquals("Koizumi", row.get("translations"));
 		assertEquals(List.of("jmnedict"), jdbc.queryForList(
 				"SELECT feed_id FROM source_version WHERE content_hash IS NOT NULL", String.class));
+	}
+
+	@Test
+	void changedNameIsUpdatedInPlace() {
+		publish(KOIZUMI + TANAKA);
+		run("jmnedict");
+
+		publish(KOIZUMI.replace("Koizumi", "Koizumi (surname)") + TANAKA);
+		run("jmnedict");
+
+		assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM name_entry", Integer.class),
+				"same ent_seq, no new row");
+		assertEquals("Koizumi (surname)", jdbc.queryForObject(
+				"SELECT array_to_string(translations, '|') FROM name_entry WHERE ent_seq = 5000001", String.class));
+	}
+
+	@Test
+	void nameRemovedUpstreamIsRetiredThenUnretiredWhenBack() {
+		publish(KOIZUMI + TANAKA);
+		run("jmnedict");
+
+		publish(KOIZUMI);
+		run("jmnedict");
+
+		assertTrue(isRetired(5000002), "row kept, marked retired");
+		assertFalse(isRetired(5000001));
+
+		publish(KOIZUMI + TANAKA);
+		run("jmnedict");
+
+		assertFalse(isRetired(5000002));
+	}
+
+	private void publish(String entries) {
+		fixtures.publishGzipped("/JMnedict.xml.gz", HEADER + entries + "</JMnedict>");
+	}
+
+	private boolean isRetired(long entSeq) {
+		return jdbc.queryForObject(
+				"SELECT retired_at IS NOT NULL FROM name_entry WHERE ent_seq = ?", Boolean.class, entSeq);
 	}
 }

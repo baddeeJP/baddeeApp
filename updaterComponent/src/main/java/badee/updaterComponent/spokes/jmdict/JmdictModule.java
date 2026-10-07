@@ -2,6 +2,7 @@ package badee.updaterComponent.spokes.jmdict;
 
 import badee.updaterComponent.hub.DataSourceModule;
 import badee.updaterComponent.hub.Hashing;
+import badee.updaterComponent.hub.RetirementGuard;
 import badee.updaterComponent.hub.SourceVersionService;
 import badee.updaterComponent.spokes.jmdict.domain.Reading;
 import badee.updaterComponent.spokes.jmdict.domain.VocabEntry;
@@ -12,8 +13,11 @@ import badee.updaterComponent.spokes.jmdict.search.VocabDocument;
 import badee.updaterComponent.spokes.jmdict.search.VocabIndexWriter;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -40,15 +44,18 @@ public class JmdictModule implements DataSourceModule {
 	private final VocabEntryRepository vocabEntryRepository;
 	private final VocabIndexWriter indexWriter;
 	private final SourceVersionService sourceVersionService;
+	private final RetirementGuard retirementGuard;
 
 	public JmdictModule(JmdictFetcher fetcher, JmdictParser parser,
 			VocabEntryRepository vocabEntryRepository, VocabIndexWriter indexWriter,
-			SourceVersionService sourceVersionService) {
+			SourceVersionService sourceVersionService,
+			RetirementGuard retirementGuard) {
 		this.fetcher = fetcher;
 		this.parser = parser;
 		this.vocabEntryRepository = vocabEntryRepository;
 		this.indexWriter = indexWriter;
 		this.sourceVersionService = sourceVersionService;
+		this.retirementGuard = retirementGuard;
 	}
 
 	@Override
@@ -68,22 +75,39 @@ public class JmdictModule implements DataSourceModule {
 
 			List<VocabEntry> batch = new ArrayList<>(BATCH_SIZE);
 			int[] total = {0};
+			Set<Long> seen = new HashSet<>();
 			parser.parse(xmlFile, entry -> {
+				seen.add(entry.getEntSeq());
 				batch.add(entry);
 				if (batch.size() >= BATCH_SIZE) {
 					total[0] += flush(batch);
 				}
 			});
 			total[0] += flush(batch);
+			// Only reached when the whole file parsed and persisted: a failure throws above.
+			int retired = retireMissing(seen);
 
 			sourceVersionService.markUpdated(FEED_ID, hash);
-			log.info("JMdict update complete: {} entries persisted and indexed", total[0]);
+			log.info("JMdict update complete: {} entries persisted and indexed, {} retired", total[0], retired);
 		} catch (IOException | InterruptedException e) {
 			if (e instanceof InterruptedException) {
 				Thread.currentThread().interrupt();
 			}
 			throw new IllegalStateException("JMdict update failed", e);
 		}
+	}
+
+	/**
+	 * Retires active entries the new file no longer has: deleted from search first, then
+	 * marked in Postgres, so a failure between the two is redone by the next run.
+	 * Returns how many were retired (0 if the retire guard blocked it).
+	 */
+	private int retireMissing(Set<Long> seen) {
+		Instant now = Instant.now();
+		return retirementGuard.retireMissing(FEED_ID, vocabEntryRepository.findActiveKeys(), seen, batch -> {
+			indexWriter.deleteAll(batch.stream().map(String::valueOf).toList());
+			vocabEntryRepository.retire(batch, now);
+		});
 	}
 
 	/** Persists the batch to Postgres, mirrors it to Elasticsearch, and clears it. */

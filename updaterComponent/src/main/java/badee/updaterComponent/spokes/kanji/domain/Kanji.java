@@ -7,6 +7,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -93,6 +94,15 @@ public class Kanji {
 	@JdbcTypeCode(SqlTypes.ARRAY)
 	@Column(name = "stroke_paths", columnDefinition = "text[]")
 	private List<String> strokePaths = new ArrayList<>();
+
+	// --- Lifecycle ---
+
+	/**
+	 * Set once no sub-source has this character any more; null while active.
+	 * Cleared when any sub-source lists it again.
+	 */
+	@Column(name = "retired_at")
+	private Instant retiredAt;
 
 	protected Kanji() {
 	}
@@ -209,5 +219,24 @@ public class Kanji {
 
 	public void setStrokePaths(List<String> strokePaths) {
 		this.strokePaths = new ArrayList<>(strokePaths);
+	}
+
+	/** Removes every field KanjiDic2 owns, for a character KanjiDic2 no longer lists. */
+	public void clearKanjiDic2Data() {
+		codepoint = null;
+		onyomi = new ArrayList<>();
+		kunyomi = new ArrayList<>();
+		nanori = new ArrayList<>();
+		meanings = new ArrayList<>();
+		strokeCount = null;
+		grade = null;
+		joyo = false;
+		jlpt = null;
+		frequency = null;
+		classicalRadical = null;
+	}
+
+	public void unretire() {
+		this.retiredAt = null;
 	}
 }

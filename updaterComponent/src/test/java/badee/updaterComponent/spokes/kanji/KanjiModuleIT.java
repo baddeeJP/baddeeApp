@@ -1,6 +1,9 @@
 package badee.updaterComponent.spokes.kanji;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import badee.updaterComponent.spokes.kanji.kanjidic2.KanjiDic2Source;
 import badee.updaterComponent.spokes.kanji.kanjivg.KanjiVGSource;
@@ -139,6 +142,75 @@ class KanjiModuleIT extends IntegrationTest {
 		assertEquals(List.of("一"), radicalsOf("亜"));
 	}
 
+	@Test
+	void subSourceDroppingAKanjiClearsOnlyItsOwnDataWhileAnotherStillHasIt() {
+		run("kanji");
+
+		publishRadkfile("""
+				# 亜 dropped from every radical
+				$ 一 1
+				丁
+				$ 亅 1
+				丁
+				""");
+		radkfile.sync();
+		fixtures.publishGzipped("/kanjidic2.xml.gz",
+				KANJIDIC2.replaceAll("(?s)<character>\\s*<literal>丁.*?</character>", ""));
+		kanjiDic2.sync();
+
+		assertEquals(List.of(), radicalsOf("亜"), "RADKFILE cleared its links");
+		assertEquals("4e9c", kanjiRow("亜").get("codepoint"), "KanjiDic2 data untouched");
+		assertNull(kanjiRow("丁").get("codepoint"), "KanjiDic2 cleared its fields");
+		assertEquals(0, jdbc.queryForObject(
+				"SELECT cardinality(meanings) FROM kanji WHERE character = '丁'", Integer.class),
+				"KanjiDic2 cleared its lists to empty");
+		assertEquals(List.of("一", "亅"), radicalsOf("丁"), "RADKFILE data untouched");
+		assertEquals("M14,24c2,0,60,-6,79,-6|M52,25c1,1,1,60,-8,69", kanjiRow("丁").get("stroke_paths"));
+		assertFalse(isRetired("丁"));
+		assertFalse(isRetired("亜"));
+	}
+
+	@Test
+	void kanjiIsRetiredOnlyOnceNoSubSourceHasItAndUnretiredWhenOneListsItAgain() {
+		String withOtsu = KANJIVG.replace("</kanjivg>", """
+				<kanji id="kvg:kanji_04e59"><g><path d="M2,2"/></g></kanji>
+				</kanjivg>""");
+		publishKanjiVG(withOtsu);
+		run("kanji");
+		assertFalse(isRetired("乙"));
+
+		publishKanjiVG(KANJIVG); // 乙 dropped; KanjiVG was its only sub-source
+		kanjiVG.sync();
+
+		assertTrue(isRetired("乙"));
+		assertEquals(0, jdbc.queryForObject(
+				"SELECT cardinality(stroke_paths) FROM kanji WHERE character = '乙'", Integer.class),
+				"stroke data cleared, row kept");
+		assertFalse(isRetired("丁"));
+
+		publishKanjiVG(withOtsu);
+		kanjiVG.sync();
+
+		assertFalse(isRetired("乙"));
+		assertEquals("M2,2", kanjiRow("乙").get("stroke_paths"));
+	}
+
+	@Test
+	void retireGuardBlocksASubSourceFromClearingMostOfItsData() {
+		run("kanji");
+
+		publishRadkfile("""
+				# truncated mirror: a single radical block for neither kanji
+				$ 乙 1
+				九
+				""");
+		radkfile.sync();
+
+		assertEquals(List.of("一", "亅"), radicalsOf("丁"));
+		assertEquals(List.of("一"), radicalsOf("亜"));
+		assertEquals(List.of("乙"), radicalsOf("九"), "upserts still applied");
+	}
+
 	/** Real KanjiVG stroke paths run past 255 chars; they used to abort the whole sub-source. */
 	@Test
 	void storesStrokePathsLongerThanAVarchar255() {
@@ -169,6 +241,11 @@ class KanjiModuleIT extends IntegrationTest {
 				       stroke_count, grade, joyo, frequency, classical_radical,
 				       array_to_string(stroke_paths, '|') AS stroke_paths
 				FROM kanji WHERE character = ?""", character);
+	}
+
+	private boolean isRetired(String character) {
+		return jdbc.queryForObject(
+				"SELECT retired_at IS NOT NULL FROM kanji WHERE character = ?", Boolean.class, character);
 	}
 
 	private List<String> radicalsOf(String character) {

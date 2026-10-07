@@ -4,7 +4,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Write-only facade over the {@code example-sentence} Elasticsearch index.
- * Exposes only saving; this app indexes data for a separate search application
+ * Exposes only saving and deleting; this app indexes data for a separate search application
  * and never queries Elasticsearch itself.
  */
 @Component
@@ -22,5 +22,10 @@ public class ExampleSentenceIndexWriter {
 
 	public void saveAll(Iterable<ExampleSentenceDocument> documents) {
 		repository.saveAll(documents);
+	}
+
+	/** Removes documents of retired entries; ids not in the index are ignored. */
+	public void deleteAll(Iterable<String> ids) {
+		repository.deleteAllById(ids);
 	}
 }

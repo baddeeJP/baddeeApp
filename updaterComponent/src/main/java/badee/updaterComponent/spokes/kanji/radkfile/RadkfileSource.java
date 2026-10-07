@@ -3,6 +3,7 @@ package badee.updaterComponent.spokes.kanji.radkfile;
 import badee.updaterComponent.hub.Hashing;
 import badee.updaterComponent.hub.SourceVersionService;
 import badee.updaterComponent.spokes.kanji.KanjiSubSource;
+import badee.updaterComponent.spokes.kanji.domain.KanjiRepository;
 import badee.updaterComponent.spokes.kanji.domain.KanjiUpserter;
 import badee.updaterComponent.spokes.kanji.domain.Radical;
 import badee.updaterComponent.spokes.kanji.domain.RadicalRepository;
@@ -35,17 +36,19 @@ public class RadkfileSource implements KanjiSubSource {
 	private final KanjiFileFetcher fetcher;
 	private final RadkfileParser parser;
 	private final RadicalRepository radicalRepository;
+	private final KanjiRepository kanjiRepository;
 	private final KanjiUpserter upserter;
 	private final SourceVersionService sourceVersionService;
 	private final String downloadUrl;
 
 	public RadkfileSource(KanjiFileFetcher fetcher, RadkfileParser parser,
-			RadicalRepository radicalRepository, KanjiUpserter upserter,
+			RadicalRepository radicalRepository, KanjiRepository kanjiRepository, KanjiUpserter upserter,
 			SourceVersionService sourceVersionService,
 			@Value("${updater.radkfile.url:http://ftp.edrdg.org/pub/Nihongo/radkfile.gz}") String downloadUrl) {
 		this.fetcher = fetcher;
 		this.parser = parser;
 		this.radicalRepository = radicalRepository;
+		this.kanjiRepository = kanjiRepository;
 		this.upserter = upserter;
 		this.sourceVersionService = sourceVersionService;
 		this.downloadUrl = downloadUrl;
@@ -83,10 +86,13 @@ public class RadkfileSource implements KanjiSubSource {
 						(kanji, entry) -> kanji.replaceRadicals(entry.getValue().stream()
 								.map(radicalRepository::getReferenceById).toList()));
 			}
+			// Only reached when the whole file parsed and persisted: a failure throws above.
+			int cleared = upserter.clearDropped(FEED_ID, kanjiRepository.findRadkfileCharacters(),
+					radicalsByKanji.keySet(), kanji -> kanji.replaceRadicals(List.of()));
 
 			sourceVersionService.markUpdated(FEED_ID, hash);
-			log.info("RADKFILE update complete: {} radicals, {} kanji decomposed",
-					radicals.size(), entries.size());
+			log.info("RADKFILE update complete: {} radicals, {} kanji decomposed, {} cleared",
+					radicals.size(), entries.size(), cleared);
 		} catch (IOException | InterruptedException e) {
 			if (e instanceof InterruptedException) {
 				Thread.currentThread().interrupt();
