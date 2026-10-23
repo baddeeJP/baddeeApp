@@ -1,8 +1,6 @@
 package badee.updaterComponent.hub;
 
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class UpdateController {
 
 	private final UpdateScheduler scheduler;
-	private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
 	public UpdateController(UpdateScheduler scheduler) {
 		this.scheduler = scheduler;
@@ -36,17 +33,16 @@ public class UpdateController {
 	/** Triggers a run of every source module in the background. */
 	@PostMapping
 	public ResponseEntity<String> runAll() {
-		executor.submit(scheduler::runAll);
+		scheduler.runAllInBackground();
 		return ResponseEntity.accepted().body("Update started for all sources");
 	}
 
 	/** Triggers a run of a single source module by id, in the background. */
 	@PostMapping("/{id}")
 	public ResponseEntity<String> runOne(@PathVariable String id) {
-		if (!scheduler.moduleIds().contains(id)) {
+		if (!scheduler.runInBackground(id)) {
 			return ResponseEntity.notFound().build();
 		}
-		executor.submit(() -> scheduler.runById(id));
 		return ResponseEntity.accepted().body("Update started for source [" + id + "]");
 	}
 }

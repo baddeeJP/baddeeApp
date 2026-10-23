@@ -12,7 +12,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 
 /**
  * Local-development stand-in for the real (Cognito) JWT verification, active
- * only while {@code updater.admin.stub-auth=true} (the default). It accepts a
+ * only while {@code updater.admin.stub-auth=true} (the local and docker profiles). It accepts a
  * single configured dev bearer token ({@code updater.admin.dev-token}) and
  * mints a minimal Cognito-shaped {@link Jwt} carrying the required admin group;
  * any other token is rejected.
@@ -23,7 +23,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
  * configured, start-up fails if the stub is on while an issuer is set.
  */
 @Configuration
-@ConditionalOnProperty(name = "updater.admin.stub-auth", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "updater.admin.stub-auth", havingValue = "true")
 public class StubJwtDecoderConfig {
 
 	@Bean

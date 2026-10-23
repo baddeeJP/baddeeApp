@@ -14,6 +14,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
@@ -21,7 +22,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Base for integration tests: boots the full application against real Postgres
- * and Elasticsearch containers (same images as {@code docker-compose.yml}) and
+ * and Elasticsearch containers (same images as the root {@code docker-compose.yml}) and
  * points every spoke's upstream URL at an in-process {@link FixtureServer}.
  *
  * <p>The containers and fixture server are started once per JVM and shared by
@@ -31,7 +32,10 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * Retire guards are lowered from the production 0.98 to 0.5 so a two-entry
  * fixture can drop one entry, while dropping two of three still trips the guard.
  * MockMvc is configured here (not per subclass) so all tests share one context.
+ * The {@code local} profile supplies stub auth; its localhost URLs are replaced
+ * by the containers' {@code @ServiceConnection}s.
  */
+@ActiveProfiles("local")
 @SpringBootTest(properties = {
 		"updater.schedule.cron=-",
 		"updater.jmdict.retire-guard=0.5",

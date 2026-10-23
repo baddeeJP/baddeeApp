@@ -25,6 +25,17 @@ class AdminApiIT extends IntegrationTest {
 	}
 
 	@Test
+	void healthIsOpenWithoutAToken() throws Exception {
+		mockMvc.perform(get("/actuator/health")).andExpect(status().isOk());
+	}
+
+	@Test
+	void otherActuatorEndpointsAreNotExposed() throws Exception {
+		mockMvc.perform(get("/actuator/env").header("Authorization", "Bearer dev-token"))
+				.andExpect(status().is4xxClientError());
+	}
+
+	@Test
 	void rejectsAnUnknownToken() throws Exception {
 		mockMvc.perform(get("/admin/updates").header("Authorization", "Bearer not-the-dev-token"))
 				.andExpect(status().isUnauthorized());

@@ -44,6 +44,20 @@ public class SecurityConfig {
 		return http.build();
 	}
 
+	/**
+	 * The health endpoint is open so the Docker (and later load-balancer)
+	 * healthcheck needs no token. It shows only UP/DOWN, no details.
+	 */
+	@Bean
+	SecurityFilterChain healthSecurityFilterChain(HttpSecurity http) throws Exception {
+		http
+				.securityMatcher("/actuator/health")
+				.authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+				.sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+				.csrf(csrf -> csrf.disable());
+		return http.build();
+	}
+
 	/** Maps each entry of the {@code cognito:groups} claim to a {@code GROUP_<name>} authority. */
 	static JwtAuthenticationConverter cognitoGroupsAuthenticationConverter() {
 		JwtGrantedAuthoritiesConverter groups = new JwtGrantedAuthoritiesConverter();

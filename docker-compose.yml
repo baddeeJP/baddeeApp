@@ -1,0 +1,91 @@
+# Local stack for baddeeApp.
+#   docker compose up --build                          everything: databases + updater
+#   docker compose up postgres elasticsearch db-init   databases only
+# Apps on the host connect to Postgres on localhost:5432 (read-only login
+# api_reader/api_reader) and Elasticsearch on localhost:9200.
+# The updater's admin API is on localhost:8081 (Bearer dev-token).
+name: baddee
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: baddee-postgres
+    environment:
+      POSTGRES_DB: updater
+      POSTGRES_USER: updater
+      POSTGRES_PASSWORD: updater
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U updater -d updater"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: creates the read-only api_reader login. Idempotent, so it runs on
+  # every `up`, for a fresh volume and for an existing one.
+  db-init:
+    image: postgres:16
+    container_name: baddee-db-init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: updater
+    volumes:
+      - ./docker/postgres/api_reader.sql:/api_reader.sql:ro
+    command: ["psql", "-h", "postgres", "-U", "updater", "-d", "updater", "-v", "ON_ERROR_STOP=1", "-f", "/api_reader.sql"]
+    restart: "no"
+
+  elasticsearch:
+    # Keep the major version in step with the elasticsearch-java client that Spring Boot
+    # manages (9.x for Boot 4.1); a 9.x client is rejected by an 8.x server.
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.4.5
+    container_name: baddee-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Runs every feed on start-up (docker profile), then on the 03:00 cron.
+  updater:
+    build: ./updaterComponent
+    image: baddee-updater
+    container_name: baddee-updater
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      # 8080 on the host is left for the API backend.
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 6
+
+volumes:
+  # Pinned to the names the old updaterComponent/docker-compose.yml created, so
+  # data loaded before the move to the repo root is kept.
+  postgres-data:
+    name: updatercomponent_postgres-data
+  elasticsearch-data:
+    name: updatercomponent_elasticsearch-data

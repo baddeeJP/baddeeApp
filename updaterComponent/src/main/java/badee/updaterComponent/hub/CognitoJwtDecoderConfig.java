@@ -17,7 +17,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 /**
  * Real JWT verification against an AWS Cognito user pool, active when
- * {@code updater.admin.stub-auth=false}. Required configuration:
+ * {@code updater.admin.stub-auth=false} (the default). Required configuration:
  *
  * <pre>
  * spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito-idp.&lt;region&gt;.amazonaws.com/&lt;userPoolId&gt;
@@ -34,7 +34,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
  * API is decided separately by group membership, see {@link SecurityConfig}.
  */
 @Configuration
-@ConditionalOnProperty(name = "updater.admin.stub-auth", havingValue = "false")
+@ConditionalOnProperty(name = "updater.admin.stub-auth", havingValue = "false", matchIfMissing = true)
 public class CognitoJwtDecoderConfig {
 
 	@Bean
